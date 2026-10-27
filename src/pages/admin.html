@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>研究者後台｜跆拳道踢擊方向判斷測驗</title>
+<style>
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;background:#fff;color:#111}
+h1{font-size:24px;margin:0 0 18px}
+h2{font-size:20px;margin:28px 0 8px}
+p.note{color:#555;font-size:15px;line-height:1.6;margin:6px 0 12px}
+p.err{color:#c92a2a;font-size:16px;min-height:1.6em;margin:12px 0 0}
+p.msg{font-size:15px;line-height:1.6;white-space:pre-line;margin:8px 0}
+.big{font-size:22px;font-weight:700;padding:14px 40px;border:0;border-radius:12px;background:#1a73e8;color:#fff;margin-top:10px;cursor:pointer}
+.btn{font-size:16px;font-weight:700;padding:9px 18px;border:2px solid #1a73e8;border-radius:10px;background:#1a73e8;color:#fff;cursor:pointer;text-decoration:none;display:inline-block;font-family:inherit}
+.btn.ghost{background:#fff;color:#111;border-color:#888}
+.btn.danger{background:#fff;color:#c92a2a;border-color:#c92a2a}
+.btn.small{font-size:14px;padding:4px 10px;border-radius:8px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:focus-visible,.tabs button:focus-visible{outline:3px solid #1a73e8;outline-offset:2px}
+input[type=password],input[type=text],input[type=email]{font-size:18px;padding:10px 12px;border:2px solid #888;border-radius:10px;font-family:inherit;width:100%}
+input[readonly]{background:#f2f2f2;color:#555}
+
+#s-login{height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
+#s-login input{max-width:320px;font-size:22px;text-align:center}
+
+#s-main{max-width:1180px;margin:0 auto;padding:0 20px 40px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:18px 0 14px;border-bottom:2px solid #222}
+header.top h1{margin:0;font-size:22px}
+.tabs{display:flex;gap:10px;margin:16px 0 4px;flex-wrap:wrap}
+.tabs button{font-size:18px;padding:9px 22px;border:2px solid #888;border-radius:10px;background:#fff;color:#111;cursor:pointer;font-family:inherit}
+.tabs button.on{background:#222;color:#fff;border-color:#222}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 6px}
+.wrap{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;font-size:14px;width:100%}
+th,td{border:1px solid #999;padding:6px 10px;text-align:right;white-space:nowrap}
+th{background:#eee;font-weight:700}
+td.t,th.t{text-align:left}
+tr.avg td{font-weight:700;background:#f7f7f7}
+td .btn+.btn{margin-left:6px}
+
+dialog{border:2px solid #222;border-radius:12px;padding:24px;width:min(460px,92vw);color:#111;font-family:inherit}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h2{margin:0 0 14px}
+dialog label{display:block;font-size:15px;margin:12px 0 4px;color:#333}
+dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+</style></head><body>
+
+<div id="s-login" hidden>
+  <h1>研究者登入</h1>
+  <input id="pw" type="password" placeholder="管理密碼" autocomplete="current-password">
+  <button class="big" id="login-btn">登入</button>
+  <p class="err" id="login-err"></p>
+</div>
+
+<div id="s-main" hidden>
+  <header class="top">
+    <h1>跆拳道踢擊方向判斷測驗｜研究者後台</h1>
+    <button class="btn ghost" id="logout">登出</button>
+  </header>
+  <nav class="tabs" aria-label="後台分頁">
+    <button id="tab-results" class="on">前後測結果</button>
+    <button id="tab-people">受試者管理</button>
+  </nav>
+
+  <section id="v-results">
+    <div class="toolbar">
+      <a class="btn" href="/admin/export/all.csv">下載 all_results.csv</a>
+      <a class="btn ghost" href="/admin/export/comparison.csv">下載 comparison.csv</a>
+      <button class="btn ghost" id="reload">重新整理</button>
+    </div>
+    <p class="note">CSV 為 UTF-8（含 BOM），可直接用 Excel 開啟。只納入完成作答的施測。</p>
+    <h2>前後測比較</h2>
+    <p class="note">RT 單位 ms；差 = 後測 − 前測。同一人同階段重做時採最新一次。</p>
+    <div class="wrap"><table id="cmp"></table></div>
+    <p class="note" id="unpaired"></p>
+    <h2>施測紀錄</h2>
+    <div class="wrap"><table id="runs"></table></div>
+  </section>
+
+  <section id="v-run" hidden>
+    <div class="toolbar">
+      <button class="btn ghost" id="back">← 返回結果</button>
+      <a class="btn" id="run-csv" href="#">下載此次 CSV</a>
+    </div>
+    <h2 id="run-title"></h2>
+    <p class="note" id="run-info"></p>
+    <div class="wrap"><table id="trials"></table></div>
+  </section>
+
+  <section id="v-people" hidden>
+    <div class="toolbar">
+      <button class="btn" id="add">新增受試者</button>
+      <button class="btn ghost" id="import-btn">匯入 CSV</button>
+      <input type="file" id="import-file" accept=".csv,text/csv" hidden>
+    </div>
+    <p class="note">編碼建立後不可修改（施測紀錄以編碼對應）。匯入的 CSV 格式與原本的 participants.csv 相同（name, code, 班級座號, 研究摘要, 電子郵件）；
+      以編碼為準：已存在則更新，不存在則新增，不會刪除任何人。</p>
+    <p class="msg" id="import-msg"></p>
+    <div class="wrap"><table id="people"></table></div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form id="pform">
+    <h2 id="dlg-title"></h2>
+    <label for="f-code">編碼</label>
+    <input id="f-code" type="text" maxlength="40" autocomplete="off">
+    <label for="f-name">姓名（同意書上的姓名）</label>
+    <input id="f-name" type="text" maxlength="50" autocomplete="off">
+    <label for="f-seat">班級座號</label>
+    <input id="f-seat" type="text" maxlength="50" autocomplete="off">
+    <label for="f-summary">研究摘要</label>
+    <input id="f-summary" type="text" maxlength="100" autocomplete="off">
+    <label for="f-email">電子郵件</label>
+    <input id="f-email" type="email" maxlength="200" autocomplete="off">
+    <p class="err" id="f-err"></p>
+    <div class="row">
+      <button type="button" class="btn ghost" id="f-cancel">取消</button>
+      <button type="submit" class="btn">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=(v,d=1)=>v==null?"—":Number.isNaN(v)?"nan":Number(v).toFixed(d);
+const when=iso=>iso?iso.replace("T"," ").replace("+08:00",""):"—";
+class AuthError extends Error{}
+
+async function api(path,opt={}){
+  const headers={...(opt.body!==undefined?{"Content-Type":"application/json; charset=utf-8"}:{}),...(opt.headers||{})};
+  const res=await fetch(path,{credentials:"same-origin",cache:"no-store",...opt,headers});
+  const data=await res.json().catch(()=>({}));
+  if(res.status===401&&!path.endsWith("/login")){showLogin("登入已過期，請重新登入");throw new AuthError();}
+  if(!res.ok) throw new Error(data.error||("發生錯誤（"+res.status+"）"));
+  return data;
+}
+async function run(fn){try{await fn();}catch(e){if(!(e instanceof AuthError))alert(e.message);}}
+
+function showLogin(msg=""){
+  $("s-main").hidden=true;$("s-login").hidden=false;$("login-err").textContent=msg;$("pw").focus();
+}
+async function enterMain(){
+  $("s-login").hidden=true;$("s-main").hidden=false;
+  showView("results");
+  await loadResults();
+}
+function showView(v){
+  $("v-results").hidden=v!=="results";
+  $("v-run").hidden=v!=="run";
+  $("v-people").hidden=v!=="people";
+  $("tab-results").classList.toggle("on",v==="results"||v==="run");
+  $("tab-people").classList.toggle("on",v==="people");
+  if(v==="people") return run(loadPeople);
+}
+
+async function doLogin(){
+  $("login-err").textContent="";
+  try{
+    await api("/admin/api/login",{method:"POST",body:JSON.stringify({password:$("pw").value})});
+    $("pw").value="";
+    await enterMain();
+  }catch(e){ $("login-err").textContent=e.message; }
+}
+$("login-btn").onclick=doLogin;
+$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+$("logout").onclick=()=>run(async()=>{
+  await fetch("/admin/api/logout",{method:"POST",credentials:"same-origin"});
+  showLogin("已登出");
+});
+
+$("tab-results").onclick=()=>showView("results");
+$("tab-people").onclick=()=>showView("people");
+$("reload").onclick=()=>run(loadResults);
+$("back").onclick=()=>showView("results");
+
+async function loadResults(){
+  const data=await api("/admin/api/results");
+  renderComparison(data.comparison);
+  renderRuns(data.runs);
+}
+
+function renderComparison(c){
+  const head=["受試者編碼","姓名","前測正確率%","後測正確率%","正確率差","前測RT(全部)","後測RT(全部)","RT差(全部)","前測RT(答對)","後測RT(答對)","RT差(答對)"];
+  const line=(code,name,values,cls="")=>`<tr class="${cls}"><td class="t">${esc(code)}</td><td class="t">${esc(name)}</td>`+
+    values.map(v=>`<td>${num(v)}</td>`).join("")+"</tr>";
+  const body=c.rows.map(r=>line(r.code,r.name,r.values)).join("")+(c.average?line("平均","",c.average,"avg"):"");
+  $("cmp").innerHTML=`<thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead>`+
+    `<tbody>${body||`<tr><td class="t" colspan="${head.length}">尚無同時完成前測與後測的受試者</td></tr>`}</tbody>`;
+  $("unpaired").textContent=c.unpaired.length?
+    "未配對（缺前測或後測）："+c.unpaired.map(u=>u.code+(u.name?"（"+u.name+"）":"")).join("、"):"";
+}
+
+function renderRuns(runs){
+  const head=["施測開始","編碼","姓名","階段","狀態","題數","正確率%","平均RT(ms)",""];
+  const rows=runs.map(r=>`<tr>
+    <td class="t">${esc(when(r.started_at))}</td>
+    <td class="t">${esc(r.participant_code)}</td>
+    <td class="t">${esc(r.name||"")}</td>
+    <td class="t">${esc(r.session)}</td>
+    <td class="t">${r.finished_at?"完成":"未完成"}</td>
+    <td>${esc(r.n)}</td><td>${num(r.acc)}</td><td>${num(r.rt,0)}</td>
+    <td class="t"><button class="btn ghost small" data-run="${esc(r.run_id)}" data-code="${esc(r.participant_code)}">檢視</button></td>
+  </tr>`).join("");
+  $("runs").innerHTML=`<thead><tr>${head.map(h=>`<th class="t">${esc(h)}</th>`).join("")}</tr></thead>`+
+    `<tbody>${rows||`<tr><td class="t" colspan="${head.length}">尚無施測紀錄</td></tr>`}</tbody>`;
+}
+$("runs").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-run]");
+  if(b) run(()=>openRun(b.dataset.run,b.dataset.code));
+});
+
+async function openRun(runId,code){
+  const data=await api(`/admin/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(code)}`);
+  const r=data.run, correct=data.trials.filter(t=>t.is_correct).length;
+  $("run-title").textContent=`${r.participant_code}　${r.name||""}　${r.session}`;
+  $("run-info").textContent=`施測編號 ${r.run_id}｜開始 ${when(r.started_at)}｜`+
+    (r.finished_at?`已完成，正確 ${correct} / ${data.trials.length} 題`:"未完成（未全部作答，不列入結果與匯出）");
+  $("run-csv").href=`/admin/export/run.csv?run_id=${encodeURIComponent(runId)}&code=${encodeURIComponent(code)}`;
+  const head=["題序","題號","圖片","標準答案","作答","結果","RT(ms)","ISI(ms)"];
+  $("trials").innerHTML=`<thead><tr>${head.map(h=>`<th class="t">${esc(h)}</th>`).join("")}</tr></thead><tbody>`+
+    data.trials.map(t=>`<tr><td>${esc(t.presentation_order)}</td><td class="t">${esc(t.trial_id)}</td>`+
+      `<td class="t">${esc(t.image)}</td><td class="t">${esc(t.correct_answer)}</td>`+
+      `<td class="t">${esc(t.response||"—")}</td><td class="t">${t.is_correct?"正確":"錯誤"}</td>`+
+      `<td>${num(t.rt_ms)}</td><td>${esc(t.isi_ms)}</td></tr>`).join("")+"</tbody>";
+  showView("run");
+}
+
+let people=[];
+async function loadPeople(){
+  people=(await api("/admin/api/participants")).participants;
+  renderPeople();
+}
+function renderPeople(){
+  const head=["編碼","姓名","班級座號","研究摘要","電子郵件","前測","後測",""];
+  const rows=people.map(p=>`<tr>
+    <td class="t">${esc(p.code)}</td><td class="t">${esc(p.name)}</td><td class="t">${esc(p.class_seat)}</td>
+    <td class="t">${esc(p.summary)}</td><td class="t">${esc(p.email)}</td>
+    <td class="t">${p.pre_done?"完成":"—"}</td><td class="t">${p.post_done?"完成":"—"}</td>
+    <td class="t"><button class="btn ghost small" data-edit="${esc(p.code)}">編輯</button>`+
+    `<button class="btn danger small" data-del="${esc(p.code)}"${p.run_count?' disabled title="已有施測紀錄，無法刪除"':""}>刪除</button></td>
+  </tr>`).join("");
+  $("people").innerHTML=`<thead><tr>${head.map(h=>`<th class="t">${esc(h)}</th>`).join("")}</tr></thead>`+
+    `<tbody>${rows||`<tr><td class="t" colspan="${head.length}">尚無受試者</td></tr>`}</tbody>`;
+}
+$("people").addEventListener("click",e=>{
+  const edit=e.target.closest("button[data-edit]"), del=e.target.closest("button[data-del]");
+  if(edit){const p=people.find(x=>x.code===edit.dataset.edit);if(p)openForm(p);}
+  if(del) run(()=>removeParticipant(del.dataset.del));
+});
+
+function openForm(p){
+  $("dlg-title").textContent=p?`編輯受試者 ${p.code}`:"新增受試者";
+  $("f-code").value=p?p.code:"";
+  $("f-code").readOnly=Boolean(p);
+  $("f-name").value=p?p.name:"";
+  $("f-seat").value=p?p.class_seat:"";
+  $("f-summary").value=p?p.summary:"";
+  $("f-email").value=p?p.email:"";
+  $("f-err").textContent="";
+  $("dlg").showModal();
+  (p?$("f-name"):$("f-code")).focus();
+}
+$("add").onclick=()=>openForm(null);
+$("f-cancel").onclick=()=>$("dlg").close();
+$("pform").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const isEdit=$("f-code").readOnly;
+  const code=$("f-code").value.trim();
+  const body=JSON.stringify({code,name:$("f-name").value,class_seat:$("f-seat").value,
+    summary:$("f-summary").value,email:$("f-email").value});
+  try{
+    if(isEdit) await api(`/admin/api/participants/${encodeURIComponent(code)}`,{method:"PUT",body});
+    else await api("/admin/api/participants",{method:"POST",body});
+    $("dlg").close();
+    await loadPeople();
+  }catch(err){
+    if(!(err instanceof AuthError)) $("f-err").textContent=err.message;
+  }
+});
+
+async function removeParticipant(code){
+  if(!confirm(`確定要刪除受試者 ${code} 嗎？`)) return;
+  await api(`/admin/api/participants/${encodeURIComponent(code)}`,{method:"DELETE"});
+  await loadPeople();
+}
+
+$("import-btn").onclick=()=>$("import-file").click();
+$("import-file").onchange=e=>run(async()=>{
+  const file=e.target.files[0];
+  e.target.value="";
+  if(!file) return;
+  let text;
+  try{
+    text=new TextDecoder("utf-8",{fatal:true}).decode(await file.arrayBuffer());
+  }catch{
+    $("import-msg").textContent="檔案不是 UTF-8 編碼。請在 Excel 另存新檔時選擇「CSV UTF-8（逗號分隔）」。";
+    return;
+  }
+  $("import-msg").textContent="匯入中…";
+  try{
+    const r=await api("/admin/api/participants/import",{method:"POST",
+      headers:{"Content-Type":"text/csv; charset=utf-8"},body:text});
+    $("import-msg").textContent=`匯入完成：新增 ${r.added} 人、更新 ${r.updated} 人`+
+      (r.skipped?`，略過 ${r.skipped} 列（姓名或編碼空白）`:"")+"。";
+  }catch(err){
+    if(err instanceof AuthError) return;
+    $("import-msg").textContent="匯入失敗，未寫入任何資料：\n"+err.message;
+  }
+  await loadPeople();
+});
+
+(async()=>{
+  const res=await fetch("/admin/api/me",{credentials:"same-origin",cache:"no-store"});
+  if(res.ok){await enterMain();return;}
+  const data=await res.json().catch(()=>({}));
+  showLogin(res.status===401?"":(data.error||""));
+})();
+</script>
+</body></html>
