@@ -1,0 +1,21 @@
+name = "taekwondo-test"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "taekwondo-test"
+database_id = "e2916574-7f4a-4e51-82e1-50fe6c3c142f"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "taekwondo-images"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
