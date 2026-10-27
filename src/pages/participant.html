@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>跆拳道踢擊方向判斷測驗</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+html,body{margin:0;height:100%;font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;background:#fff;color:#111;overscroll-behavior:none}
+.screen{display:none;height:100dvh;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
+.screen.on{display:flex}
+h1{font-size:24px;margin:0 0 18px}
+input[type=text]{font-size:22px;padding:12px;width:100%;max-width:320px;text-align:center;border:2px solid #888;border-radius:10px;user-select:text;-webkit-user-select:text}
+.sess{display:flex;gap:12px;margin:16px 0}
+.sess label{font-size:20px;padding:10px 22px;border:2px solid #888;border-radius:10px}
+.sess input{display:none}
+.sess input:checked+span{font-weight:700}
+.sess label:has(input:checked){background:#222;color:#fff;border-color:#222}
+.big{font-size:22px;font-weight:700;padding:14px 40px;border:0;border-radius:12px;background:#1a73e8;color:#fff;margin-top:10px}
+p.note{color:#555;font-size:16px;line-height:1.6;max-width:340px}
+#test{padding:0;justify-content:flex-start}
+#top{width:100%;height:28px;font-size:14px;color:#999;text-align:right;padding:6px 12px}
+#stage{flex:1;width:100%;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+#stim{max-width:100%;max-height:100%;object-fit:contain;visibility:hidden}
+#fix{position:absolute;font-size:64px;color:#444}
+#btns{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:12px 14px calc(14px + env(safe-area-inset-bottom));height:24dvh;min-height:110px}
+#btns button{display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:18px;background:#aaa}
+#btns svg{height:70%;max-width:70%;pointer-events:none}
+#btns.on button{background:#2f9e44}
+</style></head><body>
+
+<div id="s-start" class="screen on">
+  <h1>跆拳道踢擊方向判斷測驗</h1>
+  <input id="name" type="text" placeholder="請輸入姓名" autocomplete="off">
+  <div class="sess">
+    <label><input type="radio" name="sess" value="前測" checked><span>前測</span></label>
+    <label><input type="radio" name="sess" value="後測"><span>後測</span></label>
+  </div>
+  <p class="note">請將手機直立。每張照片出現後，盡快且正確地判斷踢擊方向，按下「左」或「右」。<br>圖片出現的間隔時間不固定，請保持專注。</p>
+  <button class="big" id="go">開始測驗</button>
+</div>
+
+<div id="s-load" class="screen"><h1 id="loadmsg">載入圖片中…</h1></div>
+
+<div id="s-test" class="screen">
+  <div id="top"><span id="cnt"></span></div>
+  <div id="stage"><img id="stim" alt=""><div id="fix">+</div></div>
+  <div id="btns">
+    <button id="bL" aria-label="左"><svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"><path d="M85 50H18M44 24L18 50L44 76"/></svg></button>
+    <button id="bR" aria-label="右"><svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"><path d="M15 50H82M56 24L82 50L56 76"/></svg></button>
+  </div>
+</div>
+
+<div id="s-end" class="screen">
+  <h1>測驗完成，謝謝！</h1>
+  <p class="note" id="endmsg"></p>
+  <button class="big" id="retry" style="display:none">重新傳送資料</button>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$('s-'+id).classList.add('on');}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+let cfg,trials=[],recs=[],idx=0,t0=0,accepting=false,curIsi=0,meta={};
+
+async function post(url,obj){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+$('go').onclick=async()=>{
+  const name=$('name').value.trim();
+  if(!name){alert('請輸入姓名');return;}
+  const session=document.querySelector('input[name=sess]:checked').value;
+  show('load');
+  try{
+    const lr=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    if(lr.status===404){alert('找不到此姓名，請確認輸入與同意書上的姓名一致，或洽詢施測人員。');show('start');return;}
+    if(!lr.ok) throw new Error('login');
+    const code=(await lr.json()).code;
+    const d=await (await fetch('/api/trials?code='+encodeURIComponent(code))).json();
+    cfg=d.config; trials=d.trials;
+    meta={code,session,run_id:d.run_id};
+    let n=0;
+    const uniq=[...new Set(trials.map(t=>t.filename))];
+    await Promise.all(uniq.map(fn=>new Promise(done=>{
+      const im=new Image();
+      const next=()=>{n++; $('loadmsg').textContent='載入圖片中… '+n+'/'+uniq.length; done();};
+      im.onload=next; im.onerror=next; im.src='/images/'+encodeURIComponent(fn);
+    })));
+  }catch(e){alert('無法連線到伺服器，請確認網路後重試');show('start');return;}
+  idx=0;recs=[];show('test');next();
+};
+
+function setBtns(on){$('btns').classList.toggle('on',on);}
+
+async function next(){
+  if(idx>=trials.length){return finish();}
+  accepting=false;setBtns(false);
+  $('stim').style.visibility='hidden';$('fix').style.display='block';
+  $('cnt').textContent=(idx+1)+' / '+trials.length;
+  curIsi=Math.round(cfg.isi_min+Math.random()*(cfg.isi_max-cfg.isi_min));
+  await sleep(curIsi);
+  const t=trials[idx], s=$('stim');
+  s.src='/images/'+encodeURIComponent(t.filename);
+  try{await s.decode();}catch(e){}
+  $('fix').style.display='none';
+  s.style.visibility='visible';
+  setBtns(true);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{t0=performance.now();accepting=true;}));
+}
+
+function answer(choice,ts){
+  if(!accepting) return;
+  accepting=false;
+  const rt=(ts||performance.now())-t0;
+  const rec={order:idx+1,image:trials[idx].filename,response:choice,rt_ms:Math.round(rt*10)/10,isi_ms:curIsi};
+  recs.push(rec);
+  post('/api/trial',{...meta,rec}).catch(()=>{});
+  $('stim').style.visibility='hidden';setBtns(false);
+  idx++;next();
+}
+['bL','bR'].forEach(id=>{
+  $(id).addEventListener('pointerdown',e=>{e.preventDefault();answer(id==='bL'?'左':'右',e.timeStamp);});
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')answer('左');else if(e.key==='ArrowRight')answer('右');});
+
+async function finish(){
+  show('end');$('endmsg').textContent='資料傳送中…';
+  try{
+    const r=await post('/api/finish',{...meta,records:recs});
+    $('endmsg').textContent='正確率：'+r.acc+'%　平均反應時間：'+r.rt+' ms';
+    $('retry').style.display='none';
+  }catch(e){
+    $('endmsg').textContent='資料傳送失敗，請確認網路後按下方按鈕重送（請勿關閉此頁面）。';
+    $('retry').style.display='inline-block';
+  }
+}
+$('retry').onclick=finish;
+</script></body></html>
